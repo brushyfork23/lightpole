@@ -12,6 +12,7 @@ GND -> GND
 SCK -> SK
 MO -> MI
 MI -> MO
+14 -> 7
 
 
 Code: ESP8266 sends message to moteino via SPI.  When message received, blink LED.
