@@ -11,6 +11,7 @@ Metronome (timer)
 ***************/
 #include <Metro.h>    // get it here: https://github.com/thomasfredericks/Metro-Arduino-Wiring
 
+
 /***************
 LEDs
 ***************/
@@ -26,6 +27,7 @@ LEDs
 #define FPS         63
 CRGB leds[NUM_LEDS];
 
+
 /***************
 Radio
 ***************/
@@ -34,9 +36,10 @@ Radio
 #include <RFM69_OTA.h>     //get it here: https://github.com/lowpowerlab/RFM69
 #include <SPIFlash.h>      //get it here: https://github.com/lowpowerlab/spiflash
 #include <SPI.h>           //included with Arduino IDE install (www.arduino.cc)
-#define NODEID      80      // node ID used for this unit
-#define CONTROLLER_ID 180 // ID of `gamecon`
-#define NETWORKID   180
+#define NODEID        80  // node ID used for this unit
+#define CONTROLLER_ID   180 // ID of `gamecon`
+#define GATEWAY_ID    8   // ID of the `gateway` programmer node
+#define NETWORKID     180
 #define ENCRYPTKEY "4k8hwLgy4tRtVdGq" //(16 bytes of your choice - keep the same on all encrypted nodes)
 #ifdef __AVR_ATmega1284P__
   #define LED           15 // Moteino MEGAs have LEDs on D15
@@ -75,6 +78,7 @@ SfxPayload sfxPayload;
 
 RFM69 radio;
 SPIFlash flash(FLASH_SS, 0xEF30);
+
 
 /***************
 Game
@@ -178,13 +182,14 @@ void loop() {
         if(attacking){
             SFXattacking();
         }else{
-            SFXtilt(joystickTilt);
+            SFXtilt();
         }
     }else if(stage == "DEAD"){
         SFXdead();
     }
 
   if (drawNextFrame.check()) {
+      drawNextFrame.reset();
       long mm = millis();
     if(abs(joystickTilt) > JOYSTICK_DEADZONE){
       idleTimer.reset();
@@ -301,31 +306,6 @@ void loop() {
         FastLED.show();
         Serial.println(millis()-mm);
   }
-}
-
-// ---------------------------------
-// ------------ Radio --------------
-// ---------------------------------
-void radioUpdate() {
-  if (radio.receiveDone()) {
-
-      CheckForWirelessHEX(radio, flash, false);
-
-      switch(radio.DATALEN) {
-        case sizeof(JoystickPayload):
-          joyPayload = *(JoystickPayload*)radio.DATA;
-          joystickTilt = joyPayload.joystickTilt;
-          joystickWobble = joyPayload.joystickWobble;
-          if (radio.ACKRequested()) {
-              radio.sendACK();
-          }
-          break;
-        default:
-          Serial.print("Unrecognized payload size: ");Serial.print(radio.DATALEN);
-            Serial.println();
-            break;
-      }
-    }
 }
 
 
@@ -742,9 +722,8 @@ void screenSaverTick(){
 // ---------------------------------
 // -------------- SFX --------------
 // ---------------------------------
-void SFXtilt(int amount){ 
+void SFXtilt(){ 
   sfxPayload.state = SFX_TILT;
-  sfxPayload.n = amount;
   sfxPayload.mod = playerPositionModifier;
     
 }
@@ -766,6 +745,32 @@ void SFXcomplete(){
   sfxPayload.state = SFX_SILENCE;
 }
 
+
+// ---------------------------------
+// ------------ Radio --------------
+// ---------------------------------
+void radioUpdate() {
+  if (radio.receiveDone()) {
+    if( radio.SENDERID == GATEWAY_ID && radio.TARGETID == NODEID ) {
+      Serial.print("Received targeted message from gateway.  Reflash?: ");Serial.print(radio.DATALEN);
+      Serial.println();
+      CheckForWirelessHEX(radio, flash, false);
+    }
+
+    if (radio.DATALEN == sizeof(JoystickPayload)) {
+    joyPayload = *(JoystickPayload*)radio.DATA;
+    joystickTilt = joyPayload.joystickTilt;
+    joystickWobble = joyPayload.joystickWobble;
+    if (radio.ACKRequested()) {
+      radio.sendACK();
+    }
+  } else {
+        Serial.print("Unrecognized payload size: ");Serial.print(radio.DATALEN);
+        Serial.println();
+    }
+  }
+}
+
 void sendSfx() {
   Serial.print("Sending sfx struct (");
   Serial.print(sizeof(sfxPayload));
@@ -776,3 +781,4 @@ void sendSfx() {
     Serial.print(" nothing...");
     Serial.println();
 }
+
