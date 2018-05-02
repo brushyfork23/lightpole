@@ -53,18 +53,19 @@ typedef struct {
 LivesPayload livesPayload;
 
 enum sfx_states {
-  SFX_TILT=1,
-  SFX_ATTACK,
-  SFX_DEAD,
+  SFX_SILENCE=0,
+  SFX_MOVING,
+  SFX_ATTACKING,
   SFX_KILL,
-  SFX_WIN,
-  SFX_SILENCE,
+  SFX_DEAD,
+  SFX_FANFARE_SMALL,
+  SFX_FANFARE_LARGE,
   SFX_STATES
 };
 typedef struct {
   sfx_states  state;
-  long    n;
-  int     mod;
+  long    millis;
+  int modifier;
 } SfxPayload;
 SfxPayload sfxPayload;
 
@@ -89,9 +90,6 @@ RunningMedian MPUWobbleSamples = RunningMedian(5);
 SFX
 ***************/
 #include "toneAC.h"
-sfx_states sfx_state;
-long  sfx_n;
-int   sfx_mod;
 
 
 /***************
@@ -141,6 +139,12 @@ void setup() {
 
   // init timers
   takeReading.interval(1000UL/READINGS_PER_SECOND);
+
+    // Life LEDs
+    for(int i = 0; i<3; i++){
+        pinMode(lifeLEDs[i], OUTPUT);
+        digitalWrite(lifeLEDs[i], HIGH);
+    }
 }
 
 void loop() {
@@ -149,26 +153,35 @@ void loop() {
   if (takeReading.check()) {
     takeReading.reset();
 
+    // read accelerometer
     getInput();
 
-    // send joystick reading
-  joyPayload.joystickTilt = joystickTilt;
-    joyPayload.joystickWobble = joystickWobble;
-    
-    Serial.print("Sending joystick struct (");
-    Serial.print("tilt: ");
-    Serial.print(joyPayload.joystickTilt);
-    Serial.print("wob: ");
-    Serial.print(joyPayload.joystickWobble);
-    Serial.print("byes: ");
-  Serial.print(sizeof(joyPayload));
-  Serial.print(" ... ");
-    radio.send(POLE_ID, (const void*)&joyPayload, sizeof(joyPayload), false);
-  // if (radio.sendWithRetry(POLE_ID, (const void*)&livesPayload, sizeof(livesPayload)))
-  //  Serial.print(" ok!");
-  // else
-  //  Serial.print(" nothing...");
-  Serial.println();
+    // send tilt and wobble to `pole`
+    sendJoystick();
+
+    // play SFX
+    switch(sfxPayload.state) {
+      case SFX_MOVING:
+        SFXtilt();
+        break;
+      case SFX_ATTACKING:
+        SFXattacking();
+        break;
+      case SFX_KILL:
+        SFXkill();
+        break;
+      case SFX_DEAD:
+        SFXdead();
+      case SFX_FANFARE_SMALL:
+        SFXfanfareSmall();
+        break;
+      case SFX_FANFARE_LARGE:
+        SFXfanfareLarge();
+        break;
+      default:
+        noToneAC();
+        break;
+    }
   }
 }
 
@@ -218,9 +231,9 @@ void updateLives(){
 // ---------------------------------
 void SFXtilt(){ 
     int f = map(abs(joystickTilt), 0, 90, 80, 900)+random8(100);
-    if(sfx_mod < 0) f -= 500;
-    if(sfx_mod > 0) f += 200;
-    toneAC(f, min(min(abs(sfx_n)/9, 5), MAX_VOLUME));
+    if(sfxPayload.modifier < 0) f -= 500;
+    if(sfxPayload.modifier > 0) f += 200;
+    toneAC(f, min(min(abs(joystickTilt)/9, 5), MAX_VOLUME));
     
 }
 void SFXattacking(){
@@ -231,19 +244,25 @@ void SFXattacking(){
     toneAC(freq, MAX_VOLUME);
 }
 void SFXdead(){
-    int freq = max(1000 - (millis()-sfx_n), 10);
+    int freq = max(1000 - (millis()-sfxPayload.millis), 10);
     freq += random8(200);
-    int vol = max(10 - (millis()-sfx_n)/200, 0);
+    int vol = max(10 - (millis()-sfxPayload.millis)/200, 0);
     toneAC(freq, MAX_VOLUME);
 }
 void SFXkill(){
     toneAC(2000, MAX_VOLUME, 1000, true);
 }
-void SFXwin(){
-    int freq = (millis()-sfx_n)/3.0;
-    freq += map(sin(millis()/20.0)*1000.0, -1000, 1000, 0, 20);
-    int vol = 10;//max(10 - (millis()-stageStartTime)/200, 0);
-    toneAC(freq, MAX_VOLUME);
+void SFXfanfareSmall(){
+  if (sfxPayload.millis+1200 < millis()){
+      int freq = (millis()-sfxPayload.millis)/3.0;
+      freq += map(sin(millis()/20.0)*1000.0, -1000, 1000, 0, 20);
+      int vol = 10;//max(10 - (millis()-sfxPayload.millis)/200, 0);
+      toneAC(freq, MAX_VOLUME);
+  }
+  noToneAC();
+}
+void SFXfanfareLarge(){
+  noToneAC();
 }
 
 void SFXcomplete(){
@@ -273,9 +292,10 @@ void radioUpdate() {
       break;
         case sizeof(SfxPayload):
       sfxPayload = *(SfxPayload*)radio.DATA;
-      sfx_state = sfxPayload.state;
-      sfx_n = sfxPayload.n;
-      sfx_mod = sfxPayload.mod;
+      Serial.print("Received SFX.  state: ");Serial.print(sfxPayload.state);
+      Serial.print(" millis: ");Serial.print(sfxPayload.millis);
+      Serial.print(" mod: ");Serial.print(sfxPayload.modifier);
+      Serial.println();
       if (radio.ACKRequested()) {
         radio.sendACK();
       }
@@ -287,4 +307,31 @@ void radioUpdate() {
       }
     }
 }
+
+void sendJoystick() {
+  joyPayload.joystickTilt = joystickTilt;
+    joyPayload.joystickWobble = joystickWobble;
+    
+//    Serial.print("Sending joystick struct (");
+//    Serial.print("tilt: ");
+//    Serial.print(joyPayload.joystickTilt);
+//    Serial.print("wob: ");
+//    Serial.print(joyPayload.joystickWobble);
+//    Serial.print("byes: ");
+//  Serial.print(sizeof(joyPayload));
+//  Serial.print(" ... ");
+    radio.send(POLE_ID, (const void*)&joyPayload, sizeof(joyPayload), false);
+  // if (radio.sendWithRetry(POLE_ID, (const void*)&livesPayload, sizeof(livesPayload)))
+  //  Serial.print(" ok!");
+  // else
+  //  Serial.print(" nothing...");
+//  Serial.println();
+}
+
+
+
+
+
+
+
 

@@ -61,18 +61,19 @@ typedef struct {
 LivesPayload livesPayload;
 
 enum sfx_states {
-  SFX_TILT=1,
-  SFX_ATTACK,
-  SFX_DEAD,
+  SFX_SILENCE=0,
+  SFX_MOVING,
+  SFX_ATTACKING,
   SFX_KILL,
-  SFX_WIN,
-  SFX_SILENCE,
+  SFX_DEAD,
+  SFX_FANFARE_SMALL,
+  SFX_FANFARE_LARGE,
   SFX_STATES
 };
 typedef struct {
   sfx_states  state;
-  long    n;
-  int     mod;
+  long    millis;
+  int modifier;
 } SfxPayload;
 SfxPayload sfxPayload;
 
@@ -178,16 +179,6 @@ void loop() {
 
   int brightness = 0;
 
-  if(stage == "PLAY"){
-        if(attacking){
-            SFXattacking();
-        }else{
-            SFXtilt();
-        }
-    }else if(stage == "DEAD"){
-        SFXdead();
-    }
-
   if (drawNextFrame.check()) {
       drawNextFrame.reset();
       long mm = millis();
@@ -197,22 +188,31 @@ void loop() {
                 levelNumber = -1;
                 stageStartTime = mm;
                 stage = "WIN";
+                lives=3;
+                sendSFX(SFX_MOVING, 0, playerPositionModifier);
             }
         }else{
           if (idleTimer.check()) {
             stage = "SCREENSAVER";
+            sendSFX(SFX_SILENCE, 0, 0);
+            lives=0;
+            updateLives();
           }
         }
         if(stage == "SCREENSAVER"){
             screenSaverTick();
         }else if(stage == "PLAY"){
             // PLAYING
-            if(attacking && attackMillis+ATTACK_DURATION < mm) attacking = 0;
+            if(attacking && attackMillis+ATTACK_DURATION < mm) {
+              attacking = 0; 
+              sendSFX(SFX_MOVING, 0, playerPositionModifier);
+            } 
             
             // If not attacking, check if they should be
             if(!attacking && joystickWobble > ATTACK_THRESHOLD){
                 attackMillis = mm;
                 attacking = 1;
+                sendSFX(SFX_ATTACKING, 0, 0);
             }
             
             // If still not attacking, move!
@@ -249,6 +249,7 @@ void loop() {
             FastLED.clear();
             if(!tickParticles()){
                 loadLevel();
+                sendSFX(SFX_MOVING, 0, playerPositionModifier);
             }
         }else if(stage == "WIN"){
             // LEVEL COMPLETE
@@ -259,22 +260,21 @@ void loop() {
                     brightness = 255;
                     leds[i] = CRGB(0, brightness, 0);
                 }
-                SFXwin();
             }else if(stageStartTime+1000 > mm){
                 int n = max(map(((mm-stageStartTime)), 500, 1000, NUM_LEDS, 0), 0);
                 for(int i = 0; i< n; i++){
                     brightness = 255;
                     leds[i] = CRGB(0, brightness, 0);
                 }
-                SFXwin();
             }else if(stageStartTime+1200 > mm){
                 leds[0] = CRGB(0, 255, 0);
             }else{
                 nextLevel();
+              sendSFX(SFX_MOVING, 0, playerPositionModifier);
             }
         }else if(stage == "COMPLETE"){
+          // GAME COMPLETE
             FastLED.clear();
-            SFXcomplete();
             if(stageStartTime+500 > mm){
                 int n = max(map(((mm-stageStartTime)), 0, 500, NUM_LEDS, 0), 0);
                 for(int i = NUM_LEDS; i>= n; i--){
@@ -294,6 +294,7 @@ void loop() {
                 }
             }else{
                 nextLevel();
+              sendSFX(SFX_MOVING, 0, playerPositionModifier);
             }
         }else if(stage == "GAMEOVER"){
             // GAME OVER!
@@ -301,10 +302,10 @@ void loop() {
             stageStartTime = 0;
         }
         
-        Serial.print(millis()-mm);
-        Serial.print(" - ");
+//        Serial.print(millis()-mm);
+//        Serial.print(" - ");
         FastLED.show();
-        Serial.println(millis()-mm);
+//        Serial.println(millis()-mm);
   }
 }
 
@@ -445,7 +446,11 @@ void cleanupLevel(){
 void levelComplete(){
     stageStartTime = millis();
     stage = "WIN";
-    if(levelNumber == LEVEL_COUNT) stage = "COMPLETE";
+    sendSFX(SFX_FANFARE_SMALL, stageStartTime, 0);
+    if(levelNumber == LEVEL_COUNT) {
+      stage = "COMPLETE";
+      sendSFX(SFX_FANFARE_LARGE, 0, 0);
+    }
     lives = 3;
     updateLives();
 }
@@ -475,6 +480,7 @@ void die(){
     stageStartTime = millis();
     stage = "DEAD";
     killTime = millis();
+    sendSFX(SFX_DEAD, killTime, 0);
 }
 
 
@@ -489,12 +495,12 @@ void tickEnemies(){
             if(attacking){
                 if(enemyPool[i]._pos > playerPosition-(ATTACK_WIDTH/2) && enemyPool[i]._pos < playerPosition+(ATTACK_WIDTH/2)){
                    enemyPool[i].Kill();
-                   SFXkill();
+                   sendSFX(SFX_KILL, 0, 0);
                 }
             }
             if(inLava(enemyPool[i]._pos)){
                 enemyPool[i].Kill();
-                SFXkill();
+                sendSFX(SFX_KILL, 0, 0);
             }
             // Draw (if still alive)
             if(enemyPool[i].Alive()) {
@@ -676,9 +682,11 @@ bool inLava(int pos){
 void updateLives(){
     // Updates the life LEDs to show how many lives the player has left
   livesPayload.lives = lives;
-  Serial.print("Sending lives struct (");
+  Serial.print("Sending lives struct (lives: ");
+  Serial.print(lives);
+  Serial.print(" bytes: ");
   Serial.print(sizeof(livesPayload));
-  Serial.print(" bytes) ... ");
+  Serial.print(" ... ");
   if (radio.sendWithRetry(CONTROLLER_ID, (const void*)&livesPayload, sizeof(livesPayload)))
     Serial.print(" ok!");
   else
@@ -720,33 +728,6 @@ void screenSaverTick(){
 
 
 // ---------------------------------
-// -------------- SFX --------------
-// ---------------------------------
-void SFXtilt(){ 
-  sfxPayload.state = SFX_TILT;
-  sfxPayload.mod = playerPositionModifier;
-    
-}
-void SFXattacking(){
-  sfxPayload.state = SFX_ATTACK;
-}
-void SFXdead(){
-  sfxPayload.state = SFX_DEAD;
-  sfxPayload.n = killTime;
-}
-void SFXkill(){
-  sfxPayload.state = SFX_KILL;
-}
-void SFXwin(){
-  sfxPayload.state = SFX_WIN;
-  sfxPayload.n = stageStartTime;
-}
-void SFXcomplete(){
-  sfxPayload.state = SFX_SILENCE;
-}
-
-
-// ---------------------------------
 // ------------ Radio --------------
 // ---------------------------------
 void radioUpdate() {
@@ -761,9 +742,9 @@ void radioUpdate() {
     joyPayload = *(JoystickPayload*)radio.DATA;
     joystickTilt = joyPayload.joystickTilt;
     joystickWobble = joyPayload.joystickWobble;
-    if (radio.ACKRequested()) {
-      radio.sendACK();
-    }
+//    if (radio.ACKRequested()) {
+//      radio.sendACK();
+//    }
   } else {
         Serial.print("Unrecognized payload size: ");Serial.print(radio.DATALEN);
         Serial.println();
@@ -771,14 +752,22 @@ void radioUpdate() {
   }
 }
 
-void sendSfx() {
-  Serial.print("Sending sfx struct (");
-  Serial.print(sizeof(sfxPayload));
-  Serial.print(" bytes) ... ");
-  if (radio.sendWithRetry(CONTROLLER_ID, (const void*)&sfxPayload, sizeof(sfxPayload)))
-    Serial.print(" ok!");
-  else
-    Serial.print(" nothing...");
-    Serial.println();
+void sendSFX(sfx_states state, long millis, int modifier) {
+  sfxPayload.state = state;
+  sfxPayload.millis = millis;
+  sfxPayload.modifier = modifier;
+// Serial.print("Sending sfx struct (");
+// Serial.print(sizeof(sfxPayload));
+// Serial.print(" bytes) ... ");
+  if (radio.sendWithRetry(CONTROLLER_ID, (const void*)&sfxPayload, sizeof(sfxPayload))) {
+//   Serial.print(" ok!");
+  }
+// else
+//   Serial.print(" nothing...");
+//   Serial.println();
 }
+
+
+
+
 
