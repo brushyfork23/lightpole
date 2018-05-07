@@ -2,7 +2,6 @@
 #define Mic_h
 
 #include <Arduino.h>
-#include <Streaming.h> // <<-style printing
 
 // MSGEQ7 datasheet: https://www.sparkfun.com/datasheets/Components/General/MSGEQ7.pdf
 // pin locations
@@ -25,9 +24,6 @@ class Mic {
   public:
     // startup
     void begin(int resetPin, int stobePin, int outPin);
-    
-    // show the volume levels 
-    void print();
     
     // read the current volume levels, computes some additional information
     void update();

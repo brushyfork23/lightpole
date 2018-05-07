@@ -27,19 +27,6 @@ void Mic::begin(int resetPin, int strobePin, int outPin) {
   sampleIndex = 0;
   for ( int i = 0; i < NUM_SAMPLES; i++ ) update();
 
-  Serial << F("Mic: startup complete.") << endl;
-}
-
-// show the volume levels
-void Mic::print() {
-
-  Serial << millis() << F(":\t");
-  for (int i = 0; i < NUM_FREQUENCY_BANDS; i++) {
-    Serial << bandCenter[i] << F(":") << bandVol[i][sampleIndex] << F("\t");
-  }
-  Serial << endl;
-
-  delay(5); // just in case
 }
 
 void Mic::update() {
@@ -74,10 +61,6 @@ void Mic::update() {
   // flag a beat in the band if currVol >= volAvg + threshold*volSD.
   for (int i = 0; i < NUM_FREQUENCY_BANDS; i++) {
     isBeat[i] = (currVol[i] > bandBeatMin[i]) & (currVol[i] >= bandAvg[i] + bandTh[i] * bandSD[i]);
-//    if( isBeat[i] ) {
-//      Serial << "band " << i << ": vol=" << currVol[i] << " avg=" << bandAvg[i] << " sd=" << bandSD[i] << " th=" << bandTh[i] << endl;
-//      delay(5);
-//    }
   }
 
   // recompute average and SD.
