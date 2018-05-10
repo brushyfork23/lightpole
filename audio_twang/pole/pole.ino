@@ -22,7 +22,7 @@ LEDs
 #define PIN_CLK        6
 #define LED_TYPE       APA102
 #define LED_COLOR_ORDER      BGR//GBR
-#define BRIGHTNESS           150
+#define BRIGHTNESS           200
 #define DIRECTION            1     // 0 = right to left, 1 = left to right
 #define NUM_LEDS       110
 #define FPS         63
@@ -32,7 +32,8 @@ CRGB leds[NUM_LEDS];
 /***************
 Audio
 ***************/
-#define VISUALIZER_HUE 200
+#define HUE_MULTIPLIER 8 // increase to slow rate of hue cycling
+uint16_t hue = 0;
 #define VISUALIZER_SAT 254
 uint8_t lastVol = 0; // last received volume
 uint8_t noop = 0;
@@ -95,11 +96,11 @@ Game
 #include "Spawner.h"
 #include "Lava.h"
 #include "Boss.h"
-// #include "Conveyor.h"
+#include "Conveyor.h"
 Metro drawNextFrame;
 Metro joystickIdleTimer;
 int levelNumber = 0;
-#define JOYSTICK_IDLE_TIMEOUT_MILLIS  30000
+#define JOYSTICK_IDLE_TIMEOUT_MILLIS  8000
 #define LEVEL_COUNT          9
 
 // JOYSTICK
@@ -142,10 +143,10 @@ Lava lavaPool[4] = {
     Lava(), Lava(), Lava(), Lava()
 };
 int const lavaCount = 4;
-// Conveyor conveyorPool[2] = {
-//     Conveyor(), Conveyor()
-// };
-// int const conveyorCount = 2;
+Conveyor conveyorPool[2] = {
+    Conveyor(), Conveyor()
+};
+int const conveyorCount = 2;
 Boss boss = Boss();
 
 
@@ -201,30 +202,30 @@ void loop() {
           lives=3;
       }
     }else{
-      if (joystickIdleTimer.check()) {
+      if (stage != "SCREENSAVER" && joystickIdleTimer.check()) {
         stage = "SCREENSAVER";
         lives=0;
         // updateLives();
       }
     }
 
-    if (stage != "SCREENSAVER") {
-      FastLED.clear();
-    }
-    
-    // update audio visualizer background
-    if (audioState == AS_RECEIVING && stage != "SCREENSAVER") {
-      if (audioIdleTimer.check()) {
-        audioState = AS_IDLE;
-      } else {
-        animSideToSideTick();
-        //animCenterRadiateTick();
-      }
+    // check audio level, potentially toggle audio state
+    if (audioState == AS_RECEIVING && audioIdleTimer.check()) {
+      audioState = AS_IDLE; 
     }
 
-    if(stage == "SCREENSAVER" && audioState == AS_IDLE) {
-      // only show screensaver if the visualizer isn't operating
-      animScreenSaverTick();
+    // the non-audio screensaver requires the existing pixels not be cleared away
+    if (stage != "SCREENSAVER" || audioState == AS_RECEIVING) {
+      FastLED.clear();
+    }
+
+    if (stage == "SCREENSAVER") {
+      if (audioState == AS_RECEIVING) {
+        //animSideToSideTick();
+        animCenterRadiateTick();
+      } else {
+        animScreenSaverTick();
+      }
     }else if(stage == "PLAY"){
       // PLAYING
       if(attacking && attackMillis+ATTACK_DURATION < mm) {
@@ -257,7 +258,7 @@ void loop() {
       }
       
       // Ticks and draw calls
-      // tickConveyors();
+      tickConveyors();
       tickSpawners();
       tickBoss();
       tickLava();
@@ -362,12 +363,12 @@ void loadLevel(){
             break;
         case 5:
             // Conveyor
-            // spawnConveyor(100, 600, -1);
+            spawnConveyor(100, 600, -1);
             spawnEnemy(800, 0, 0, 0);
             break;
         case 6:
             // Conveyor of enemies
-            // spawnConveyor(50, 1000, 1);
+            spawnConveyor(50, 1000, 1);
             spawnEnemy(300, 0, 0, 0);
             spawnEnemy(400, 0, 0, 0);
             spawnEnemy(500, 0, 0, 0);
@@ -390,7 +391,7 @@ void loadLevel(){
             spawnEnemy(500, 1, 5, 250);
             spawnPool[0].Spawn(1000, 5500, 4, 0, 3000);
             spawnPool[1].Spawn(0, 5500, 5, 1, 10000);
-            // spawnConveyor(100, 900, -1);
+            spawnConveyor(100, 900, -1);
             break;
         case 9:
             // Boss
@@ -433,14 +434,14 @@ void spawnLava(int left, int right, int ontime, int offtime, int offset, char* s
     }
 }
 
-// void spawnConveyor(int startPoint, int endPoint, int dir){
-//     for(int i = 0; i<conveyorCount; i++){
-//         if(!conveyorPool[i]._alive){
-//             conveyorPool[i].Spawn(startPoint, endPoint, dir);
-//             return;
-//         }
-//     }
-// }
+void spawnConveyor(int startPoint, int endPoint, int dir){
+    for(int i = 0; i<conveyorCount; i++){
+        if(!conveyorPool[i]._alive){
+            conveyorPool[i].Spawn(startPoint, endPoint, dir);
+            return;
+        }
+    }
+}
 
 void cleanupLevel(){
     for(int i = 0; i<enemyCount; i++){
@@ -455,9 +456,9 @@ void cleanupLevel(){
     for(int i = 0; i<lavaCount; i++){
         lavaPool[i].Kill();
     }
-    // for(int i = 0; i<conveyorCount; i++){
-    //     conveyorPool[i].Kill();
-    // }
+    for(int i = 0; i<conveyorCount; i++){
+        conveyorPool[i].Kill();
+    }
     boss.Kill();
 }
 
@@ -628,34 +629,34 @@ bool tickParticles(){
     return stillActive;
 }
 
-// void tickConveyors(){
-//     int b, dir, n, i, ss, ee, led;
-//     long m = 10000+millis();
-//     playerPositionModifier = 0;
+void tickConveyors(){
+    int b, dir, n, i, ss, ee, led;
+    long m = 10000+millis();
+    playerPositionModifier = 0;
     
-//     for(i = 0; i<conveyorCount; i++){
-//         if(conveyorPool[i]._alive){
-//             dir = conveyorPool[i]._dir;
-//             ss = getLED(conveyorPool[i]._startPoint);
-//             ee = getLED(conveyorPool[i]._endPoint);
-//             for(led = ss; led<ee; led++){
-//                 b = 5;
-//                 n = (-led + (m/100)) % 5;
-//                 if(dir == -1) n = (led + (m/100)) % 5;
-//                 b = (5-n)/2.0;
-//                 if(b > 0) leds[led] = CRGB(0, 0, b);
-//             }
+    for(i = 0; i<conveyorCount; i++){
+        if(conveyorPool[i]._alive){
+            dir = conveyorPool[i]._dir;
+            ss = getLED(conveyorPool[i]._startPoint);
+            ee = getLED(conveyorPool[i]._endPoint);
+            for(led = ss; led<ee; led++){
+                b = 5;
+                n = (-led + (m/100)) % 5;
+                if(dir == -1) n = (led + (m/100)) % 5;
+                b = (5-n)/2.0;
+                if(b > 0) leds[led] = CRGB(0, 0, b);
+            }
             
-//             if(playerPosition > conveyorPool[i]._startPoint && playerPosition < conveyorPool[i]._endPoint){
-//                 if(dir == -1){
-//                     playerPositionModifier = -(MAX_PLAYER_SPEED-4);
-//                 }else{
-//                     playerPositionModifier = (MAX_PLAYER_SPEED-4);
-//                 }
-//             }
-//         }
-//     }
-// }
+            if(playerPosition > conveyorPool[i]._startPoint && playerPosition < conveyorPool[i]._endPoint){
+                if(dir == -1){
+                    playerPositionModifier = -(MAX_PLAYER_SPEED-4);
+                }else{
+                    playerPositionModifier = (MAX_PLAYER_SPEED-4);
+                }
+            }
+        }
+    }
+}
 
 void drawAttack(){
     if(!attacking) return;
@@ -741,27 +742,41 @@ void animScreenSaverTick(){
 
 // scroll pixels across the display
 void animSideToSideTick(){
+  // cycle color
+  hue++;
+  if (hue >= 255*HUE_MULTIPLIER) {
+    hue=0;
+  }
+
   for (uint8_t i=NUM_LEDS; i>0; i--){
     vols[i] = vols[i-1];
   }
   vols[0] = lastVol;
   for (uint8_t i=0; i<NUM_LEDS; i++) {
-    leds[i] = CHSV(VISUALIZER_HUE, VISUALIZER_SAT, vols[i]);
+    leds[i] = CHSV(hue/HUE_MULTIPLIER, VISUALIZER_SAT, vols[i]);
   }
   
 }
 
 // radiate pixels from center
 void animCenterRadiateTick(){
+  // cycle color
+  hue++;
+  if (hue >= 255*HUE_MULTIPLIER) {
+    hue=0;
+  }
+
   for (uint8_t i=NUM_LEDS; i>NUM_LEDS/2; i--){
-    vols[i] = vols[i-1];
+    // diminish as we go outward
+    vols[i] = scale8(vols[i-1], 245);
   }
   for (uint8_t i=0; i<NUM_LEDS/2; i++){
-    vols[i] = vols[i+1];
+    // diminish as we go outward
+    vols[i] = scale8(vols[i+1], 245);
   }
   vols[NUM_LEDS/2] = lastVol;
   for (uint8_t i=0; i<NUM_LEDS; i++) {
-      leds[i] = CHSV(VISUALIZER_HUE, VISUALIZER_SAT, vols[i]);
+      leds[i] = CHSV(hue/HUE_MULTIPLIER, VISUALIZER_SAT, vols[i]);
   }
 }
 

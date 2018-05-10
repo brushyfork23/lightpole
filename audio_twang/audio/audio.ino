@@ -3,7 +3,7 @@
  * Physical Description: A Moteino connected to an MSGEQ7 audio decoder.
  *                       5V in for optimal audio decoder performance.
  *                       
- * Purpose: Read audio, take a rolling media, and stream data to `pole`.
+ * Purpose: Read audio and stream data to `pole`.
  * TODO: expose API 
  */
 
@@ -15,19 +15,14 @@ Metronome (timer)
 /***************
 Microphone
 ***************/
-#include "Mic.h"
-#include "RunningMedian.h"
-#define NOISE 115
-#define READINGS_PER_SECOND  30
-RunningMedian VolSamples = RunningMedian(60);
-uint8_t triggerBand =2; // audio band to monitor volume on
-uint16_t vol = 0;
-Metro takeReading;
-#define SAMPLES 60
-int minVolAvg=0,
-maxVolAvg=0,
-vols[SAMPLES],
-volCount=0;
+#include <MSGEQ7.h> // get it here: https://github.com/NicoHood/MSGEQ7
+#define MIC_OUT_PIN A0
+#define MIC_STROBE_PIN A1
+#define MIC_RESET_PIN A2
+#define SMOOTHING 191
+CMSGEQ7<SMOOTHING, MIC_RESET_PIN, MIC_STROBE_PIN, MIC_OUT_PIN> MSGEQ7;
+#define MSGEQ7_INTERVAL ReadsPerSecond(30)
+uint8_t vol = 0;
 
 /***************
 Radio
@@ -65,7 +60,7 @@ void setup() {
   while(!Serial);
 
   // init microphone
-  listenLine.begin(MIC_RESET_PIN, MIC_STROBE_PIN, MIC_OUT_PIN);
+  MSGEQ7.begin();
 
   // init radio
   radio.initialize(RF69_915MHZ,NODEID,NETWORKID);
@@ -78,126 +73,23 @@ void setup() {
     Serial.println("SPI Flash Init OK!");
   else
     Serial.println("SPI Flash Init FAIL!");
-
-  // init timers
-  takeReading.interval(1000UL/READINGS_PER_SECOND);
 }
 
 void loop() {
-  if (takeReading.check()) {
-      takeReading.reset();
-    readVolume();
+  if (vol = MSGEQ7.read(MSGEQ7_INTERVAL)) {
+    vol = MSGEQ7.get(MSGEQ7_MID);
+    vol = mapNoise(vol);
+    Serial.println(vol);
     sendVol();
   }
 }
 
 
 // ---------------------------------
-// --------- Microphone ------------
-// ---------------------------------
-void readVolume() {
-int minLvl, maxLvl, floatMax, floatMin;
-  // read value from microphone
-  listenLine.update();
-  int n = listenLine.getVol(triggerBand);
-Serial.print("n: ");
-Serial.print(n);
-  // adjust sample for noise
-  if (n < NOISE) {
-    n = NOISE;
-  }
-    
-    // take median value of recent readings
-  VolSamples.add(n);
-    vol = VolSamples.getAverage(5);
-Serial.print(" avg5: ");
-Serial.print(vol);
-
-floatMax = VolSamples.getHighest();
-Serial.print(" max: ");
-Serial.print(floatMax);
-
-if (vol >= floatMax) {
-  vol = floatMax-1;
-}
-
-floatMin = VolSamples.getLowest();
-
-if (floatMax - floatMin < 20) {
-  // not enough data to get a good reading, so go dark.
-  vol = 0;
-    Serial.print(" lowvol: ");
-  Serial.print(vol);
-  Serial.println();
-} else {
-
-    vol = map(vol, NOISE, floatMax, 0, 255 );
-  Serial.print(" map: ");
-  Serial.print(vol);
-  Serial.println();
-}
-
-    Serial.println(vol);
-}
-// int lvl=0,
-// minLvlAvg=0,
-// maxLvlAvg=0,
-// vols[SAMPLES],
-// volCount=0;
-// #define TOP 1000
-// void readVolume() {
-//   uint8_t  i,
-//         squash = 100;
-//   uint16_t minLvl, maxLvl;
-  
-//   listenLine.update();
-//   int n = listenLine.getVol(triggerBand);
-//   //Serial << F("line in: ") << n << endl;
-//   n = (n <= squash) ? 0 : (n - squash);                         // Remove noise/hum
-//   lvl = ((lvl * 7) + n) >> 3;                                 // "Dampened" reading (else looks twitchy)
-
-//   // Calculate bar height based on dynamic min/max levels (fixed point):
-//   vol = TOP * (lvl - minLvlAvg) / (long)(maxLvlAvg - minLvlAvg);
-//   //amplitude = map(lvl, 0, TOP, 0, 255); 
-//   //amplitude = map(lvl, minLvlAvg, maxLvlAvg, 0, 255); 
-
-//   //Serial << F("n, l, amp: ") << n << ", " << lvl << ", " << amplitude << endl;
-  
-//   if (vol < 0L)       vol = 0;                          // Clip output
-//   else if (vol > TOP) vol = TOP;
-  
-//   vols[volCount] = n;                                          // Save sample for dynamic leveling
-//   if (++volCount >= SAMPLES) volCount = 0;                    // Advance/rollover sample counter
- 
-//   // Get volume range of prior frames
-//   minLvl = maxLvl = vols[0];
-//   for (i=1; i<SAMPLES; i++) {
-//     if (vols[i] < minLvl)      minLvl = vols[i];
-//     else if (vols[i] > maxLvl) maxLvl = vols[i];
-//   }
-//   // minLvl and maxLvl indicate the volume range over prior frames, used
-//   // for vertically scaling the output graph (so it looks interesting
-//   // regardless of volume level).  If they're too close together though
-//   // (e.g. at very low volume levels) the graph becomes super coarse
-//   // and 'jumpy'...so keep some minimum distance between them (this
-//   // also lets the graph go to zero when no sound is playing):
-//   if((maxLvl - minLvl) <= TOP) maxLvl = minLvl + TOP;
-//   minLvlAvg = (minLvlAvg * 63 + minLvl) >> 6;                 // Dampen min/max levels
-//   maxLvlAvg = (maxLvlAvg * 63 + maxLvl) >> 6;                 // (fake rolling average)
-//   Serial.println(vol);
-// }
-
-
-// ---------------------------------
 // ------------ Radio --------------
 // ---------------------------------
 void sendVol() {
-//  if (vol > 150) {
     micPayload.vol = vol;
-//  } else {
-//    micPayload.vol = 0;
-//  }
-//    
 //    Serial.print("Sending volume struct (");
 //    Serial.print("vol: ");
 //    Serial.print(micPayload.vol);
@@ -212,17 +104,3 @@ void sendVol() {
 //    Serial.print(" nothing...");
   // Serial.println();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
