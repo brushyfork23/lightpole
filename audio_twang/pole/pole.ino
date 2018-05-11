@@ -34,14 +34,15 @@ Audio
 ***************/
 #define HUE_MULTIPLIER 8 // increase to slow rate of hue cycling
 uint16_t hue = 0;
-
 uint8_t targetHue = 0;
+uint8_t hueFrameCounter = 0;
+#define FRAMES_PER_HUE 8
 #define VISUALIZER_SAT 254
 uint8_t lastVol = 0; // last received volume
 uint8_t noop = 0;
 uint8_t vols[NUM_LEDS]; // volume readings (one for each LED)
-#define AUDIO_IDLE_TIMEOUT_MILLIS  5000
-long lastAudioMillis = 0;
+#define AUDIO_IDLE_TIMEOUT_MILLIS  90000
+long lastAudioVolMillis = 0;
 enum audioState {
   AS_RECEIVING=0,
   AS_IDLE
@@ -69,6 +70,8 @@ Radio
   #define LED           9 // Moteinos have LEDs on D9
   #define FLASH_SS      8 // and FLASH SS on D8
 #endif
+#define AUDIO_TRANSMISSION_TIMEOUT_MILLIS 250
+long lastAudioTransmissionMillis = 0;
 
 typedef struct {
   int joystickTilt;
@@ -120,7 +123,15 @@ bool attacking = 0;                // Is the attack in progress?
 
 // PLAYER
 #define MAX_PLAYER_SPEED    10     // Max move speed of the player
-char* stage;                       // what stage the game is at (PLAY/DEAD/WIN/GAMEOVER)
+enum gameState {
+  GS_PLAY=0,
+  GS_DEAD,
+  GS_WIN,
+  GS_COMPLETE,
+  GS_GAMEOVER,
+  GS_SCREENSAVER
+};
+gameState stage;
 long stageStartTime;               // Stores the time the stage changed for stages that are time based
 int playerPosition;                // Stores the player position
 int playerPositionModifier;        // +/- adjustment to player position
@@ -194,39 +205,42 @@ void loop() {
     // check joystick; potentially toggle game state
     if(abs(joystickTilt) > JOYSTICK_DEADZONE){
       lastJoystickMoveMillis = mm;
-      if(stage == "SCREENSAVER"){
+      if(stage == GS_SCREENSAVER){
           levelNumber = -1;
           stageStartTime = mm;
-          stage = "WIN";
+          stage = GS_WIN;
           lives=3;
       }
     }else{
-      if (stage != "SCREENSAVER" && (mm - lastJoystickMoveMillis > JOYSTICK_IDLE_TIMEOUT_MILLIS)) {
-        stage = "SCREENSAVER";
+      if (stage != GS_SCREENSAVER && (mm - lastJoystickMoveMillis > JOYSTICK_IDLE_TIMEOUT_MILLIS)) {
+        stage = GS_SCREENSAVER;
         lives=0;
         updateLives();
       }
     }
 
     // check audio level, potentially toggle audio state
-    if (audioState == AS_RECEIVING && (mm - lastAudioMillis > AUDIO_IDLE_TIMEOUT_MILLIS)) {
-      Serial.println("going idle");
+    if (audioState == AS_RECEIVING && 
+      (
+        (mm - lastAudioVolMillis > AUDIO_IDLE_TIMEOUT_MILLIS)
+        || (mm - lastAudioTransmissionMillis > AUDIO_TRANSMISSION_TIMEOUT_MILLIS)
+      )) {
       audioState = AS_IDLE; 
     }
 
     // the non-audio screensaver requires the existing pixels not be cleared away
-    if (stage != "SCREENSAVER" || audioState == AS_RECEIVING) {
+    if (stage != GS_SCREENSAVER || audioState == AS_RECEIVING) {
       FastLED.clear();
     }
 
-    if (stage == "SCREENSAVER") {
+    if (stage == GS_SCREENSAVER) {
       if (audioState == AS_RECEIVING) {
         //animSideToSideTick();
         animCenterRadiateTick();
       } else {
         animScreenSaverTick();
       }
-    }else if(stage == "PLAY"){
+    }else if(stage == GS_PLAY){
       // PLAYING
       if(attacking && attackMillis+ATTACK_DURATION < mm) {
         attacking = 0; 
@@ -266,13 +280,13 @@ void loop() {
       drawPlayer();
       drawAttack();
       drawExit();
-    }else if(stage == "DEAD"){
+    }else if(stage == GS_DEAD){
         // DEAD
         // FastLED.clear();
         if(!tickParticles()){
             loadLevel();
         }
-    }else if(stage == "WIN"){
+    }else if(stage == GS_WIN){
         // LEVEL COMPLETE
         // FastLED.clear();
         if(stageStartTime+500 > mm){
@@ -292,7 +306,7 @@ void loop() {
         }else{
             nextLevel();
         }
-    }else if(stage == "COMPLETE"){
+    }else if(stage == GS_COMPLETE){
       // GAME COMPLETE
         // FastLED.clear();
         if(stageStartTime+500 > mm){
@@ -315,7 +329,7 @@ void loop() {
         }else{
             nextLevel();
         }
-    }else if(stage == "GAMEOVER"){
+    }else if(stage == GS_GAMEOVER){
         // GAME OVER!
         // FastLED.clear();
         stageStartTime = 0;
@@ -399,7 +413,7 @@ void loadLevel(){
             break;
     }
     stageStartTime = millis();
-    stage = "PLAY";
+    stage = GS_PLAY;
 }
 
 void spawnBoss(){
@@ -464,9 +478,9 @@ void cleanupLevel(){
 
 void levelComplete(){
     stageStartTime = millis();
-    stage = "WIN";
+    stage = GS_WIN;
     if(levelNumber == LEVEL_COUNT) {
-      stage = "COMPLETE";
+      stage = GS_COMPLETE;
     }
     lives = 3;
 }
@@ -494,7 +508,7 @@ void die(){
         particlePool[p].Spawn(playerPosition);
     }
     stageStartTime = millis();
-    stage = "DEAD";
+    stage = GS_DEAD;
     killTime = millis();
 }
 
@@ -743,27 +757,38 @@ void animScreenSaverTick(){
 // scroll pixels across the display
 void animSideToSideTick(){
   // cycle color
-  hue++;
-  if (hue >= 255*HUE_MULTIPLIER) {
+  if (hue >= 255) {
     hue=0;
   }
-
+  if (++hueFrameCounter > FRAMES_PER_HUE) {
+    hue++;
+  }
+  
   for (uint8_t i=NUM_LEDS; i>0; i--){
     vols[i] = vols[i-1];
   }
   vols[0] = lastVol;
   for (uint8_t i=0; i<NUM_LEDS; i++) {
-    leds[i] = CHSV(hue/HUE_MULTIPLIER, VISUALIZER_SAT, vols[i]);
+    leds[i] = CHSV(hue, VISUALIZER_SAT, vols[i]);
   }
   
 }
 
 // radiate pixels from center
 void animCenterRadiateTick(){
-  // cycle color
-  hue++;
-  if (hue >= 255*HUE_MULTIPLIER) {
-    hue=0;
+  // move toward target hue
+  if (hue == targetHue) {
+    targetHue = random8();
+  } else if (255 - hue + targetHue > 255-targetHue+hue) {
+    if (++hueFrameCounter > FRAMES_PER_HUE) {
+      hueFrameCounter = 0;
+      hue++;
+    }
+  } else {
+    if (++hueFrameCounter > FRAMES_PER_HUE) {
+      hueFrameCounter = 0;
+      hue--;
+    }
   }
 
   for (uint8_t i=NUM_LEDS; i>NUM_LEDS/2; i--){
@@ -776,7 +801,7 @@ void animCenterRadiateTick(){
   }
   vols[NUM_LEDS/2] = lastVol;
   for (uint8_t i=0; i<NUM_LEDS; i++) {
-      leds[i] = CHSV(hue/HUE_MULTIPLIER, VISUALIZER_SAT, vols[i]);
+      leds[i] = CHSV(hue, VISUALIZER_SAT, vols[i]);
   }
 }
 
@@ -793,13 +818,14 @@ void radioUpdate() {
     }
 
     if (radio.DATALEN == sizeof(MicPayload)) {
+      lastAudioTransmissionMillis = millis();
       // get volume
       micPayload = *(MicPayload*)radio.DATA;
       lastVol = micPayload.vol;
       noop = lastVol;
       // update state
-      if (micPayload.vol > 0) {
-        lastAudioMillis = millis();
+      if (micPayload.vol > 45) {
+        lastAudioVolMillis = millis();
         if (audioState == AS_IDLE) {
           audioState = AS_RECEIVING;
           // clear previous volume readings
@@ -824,7 +850,5 @@ void radioUpdate() {
     }
   }
 }
-
-
 
 
