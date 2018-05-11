@@ -34,12 +34,14 @@ Audio
 ***************/
 #define HUE_MULTIPLIER 8 // increase to slow rate of hue cycling
 uint16_t hue = 0;
+
+uint8_t targetHue = 0;
 #define VISUALIZER_SAT 254
 uint8_t lastVol = 0; // last received volume
 uint8_t noop = 0;
 uint8_t vols[NUM_LEDS]; // volume readings (one for each LED)
-#define AUDIO_IDLE_TIMEOUT_MILLIS  250
-Metro audioIdleTimer;
+#define AUDIO_IDLE_TIMEOUT_MILLIS  5000
+long lastAudioMillis = 0;
 enum audioState {
   AS_RECEIVING=0,
   AS_IDLE
@@ -74,10 +76,10 @@ typedef struct {
 } JoystickPayload;
 JoystickPayload joyPayload;
 
-// typedef struct {
-//   uint8_t lives;
-// } LivesPayload;
-// LivesPayload livesPayload;
+typedef struct {
+  uint8_t lives;
+} LivesPayload;
+LivesPayload livesPayload;
 
 typedef struct {
   uint8_t vol;
@@ -97,10 +99,10 @@ Game
 #include "Lava.h"
 #include "Boss.h"
 #include "Conveyor.h"
-Metro drawNextFrame;
-Metro joystickIdleTimer;
+long lastFrameDrawMillis = 0;
+long lastJoystickMoveMillis = 0;
 int levelNumber = 0;
-#define JOYSTICK_IDLE_TIMEOUT_MILLIS  8000
+#define JOYSTICK_IDLE_TIMEOUT_MILLIS  30000
 #define LEVEL_COUNT          9
 
 // JOYSTICK
@@ -128,7 +130,7 @@ int lives = 3;
 
 // POOLS
 Enemy enemyPool[7] = {
-    Enemy(), Enemy(), Enemy(), Enemy(), Enemy(), Enemy(), Enemy()//, Enemy(), Enemy(), Enemy()
+    Enemy(), Enemy(), Enemy(), Enemy(), Enemy(), Enemy(), Enemy()
 };
 int const enemyCount = 7;
 Particle particlePool[40] = {
@@ -177,9 +179,6 @@ void setup() {
     loadLevel();
 
   // init timers
-  drawNextFrame.interval(1000UL/FPS);
-  joystickIdleTimer.interval(JOYSTICK_IDLE_TIMEOUT_MILLIS);
-  audioIdleTimer.interval(AUDIO_IDLE_TIMEOUT_MILLIS);
   audioState = AS_IDLE;
 }
 
@@ -188,13 +187,13 @@ void loop() {
 
   int brightness = 0;
 
-  if (drawNextFrame.check()) {
-    drawNextFrame.reset();
-    long mm = millis();
+  long mm = millis();
+  if (mm - lastFrameDrawMillis > 1000UL/FPS) {
+    lastFrameDrawMillis = mm;
 
     // check joystick; potentially toggle game state
     if(abs(joystickTilt) > JOYSTICK_DEADZONE){
-      joystickIdleTimer.reset();
+      lastJoystickMoveMillis = mm;
       if(stage == "SCREENSAVER"){
           levelNumber = -1;
           stageStartTime = mm;
@@ -202,15 +201,16 @@ void loop() {
           lives=3;
       }
     }else{
-      if (stage != "SCREENSAVER" && joystickIdleTimer.check()) {
+      if (stage != "SCREENSAVER" && (mm - lastJoystickMoveMillis > JOYSTICK_IDLE_TIMEOUT_MILLIS)) {
         stage = "SCREENSAVER";
         lives=0;
-        // updateLives();
+        updateLives();
       }
     }
 
     // check audio level, potentially toggle audio state
-    if (audioState == AS_RECEIVING && audioIdleTimer.check()) {
+    if (audioState == AS_RECEIVING && (mm - lastAudioMillis > AUDIO_IDLE_TIMEOUT_MILLIS)) {
+      Serial.println("going idle");
       audioState = AS_IDLE; 
     }
 
@@ -333,7 +333,7 @@ void loop() {
 // ------------ LEVELS -------------
 // ---------------------------------
 void loadLevel(){
-    // updateLives();
+    updateLives();
     cleanupLevel();
     playerPosition = 0;
     playerAlive = 1;
@@ -469,7 +469,6 @@ void levelComplete(){
       stage = "COMPLETE";
     }
     lives = 3;
-    // updateLives();
 }
 
 void nextLevel(){
@@ -486,7 +485,7 @@ void gameOver(){
 void die(){
     playerAlive = 0;
     if(levelNumber > 0) lives --;
-    // updateLives();
+    updateLives();
     if(lives == 0){
         levelNumber = 0;
         lives = 3;
@@ -693,20 +692,21 @@ bool inLava(int pos){
     return false;
 }
 
-// void updateLives(){
-//     // Updates the life LEDs to show how many lives the player has left
-//   livesPayload.lives = lives;
-//   Serial.print("Sending lives struct (lives: ");
-//   Serial.print(lives);
-//   Serial.print(" bytes: ");
-//   Serial.print(sizeof(livesPayload));
-//   Serial.print(" ... ");
-//   if (radio.sendWithRetry(CONTROLLER_ID, (const void*)&livesPayload, sizeof(livesPayload)))
-//     Serial.print(" ok!");
-//   else
-//     Serial.print(" nothing...");
-//     Serial.println();
-// }
+void updateLives(){
+    // Updates the life LEDs to show how many lives the player has left
+  livesPayload.lives = lives;
+  // Serial.print("Sending lives struct (lives: ");
+  // Serial.print(lives);
+  // Serial.print(" bytes: ");
+  // Serial.print(sizeof(livesPayload));
+  // Serial.print(" ... ");
+  radio.sendWithRetry(CONTROLLER_ID, (const void*)&livesPayload, sizeof(livesPayload));
+  // if (radio.sendWithRetry(CONTROLLER_ID, (const void*)&livesPayload, sizeof(livesPayload)))
+  //   Serial.print(" ok!");
+  // else
+  //   Serial.print(" nothing...");
+  //   Serial.println();
+}
 
 // ---------------------------------
 // --------- ANIMATIONS ------------
@@ -793,7 +793,13 @@ void radioUpdate() {
     }
 
     if (radio.DATALEN == sizeof(MicPayload)) {
-        audioIdleTimer.reset();
+      // get volume
+      micPayload = *(MicPayload*)radio.DATA;
+      lastVol = micPayload.vol;
+      noop = lastVol;
+      // update state
+      if (micPayload.vol > 0) {
+        lastAudioMillis = millis();
         if (audioState == AS_IDLE) {
           audioState = AS_RECEIVING;
           // clear previous volume readings
@@ -801,12 +807,10 @@ void radioUpdate() {
             vols[i]=0;
           }
         }
-        micPayload = *(MicPayload*)radio.DATA;
-        lastVol = micPayload.vol;
-        noop = lastVol;
-        // if (radio.ACKRequested()) {
-        //   radio.sendACK();
-        // }
+      }
+      // if (radio.ACKRequested()) {
+      //   radio.sendACK();
+      // }
     } else if (radio.DATALEN == sizeof(JoystickPayload)) {
       joyPayload = *(JoystickPayload*)radio.DATA;
       joystickTilt = joyPayload.joystickTilt;
@@ -820,7 +824,6 @@ void radioUpdate() {
     }
   }
 }
-
 
 
 

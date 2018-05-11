@@ -78,7 +78,7 @@ void setup() {
 void loop() {
   if (vol = MSGEQ7.read(MSGEQ7_INTERVAL)) {
     vol = MSGEQ7.get(MSGEQ7_MID);
-    vol = mapNoise(vol);
+    vol = mapNoise(vol, 40);
     Serial.println(vol);
     sendVol();
   }
@@ -104,3 +104,5 @@ void sendVol() {
 //    Serial.print(" nothing...");
   // Serial.println();
 }
+
+
