@@ -32,11 +32,10 @@ CRGB leds[NUM_LEDS];
 /***************
 Audio
 ***************/
-#define HUE_MULTIPLIER 8 // increase to slow rate of hue cycling
 uint16_t hue = 0;
 uint8_t targetHue = 0;
 uint8_t hueFrameCounter = 0;
-#define FRAMES_PER_HUE 8
+#define FRAMES_PER_HUE 4
 #define VISUALIZER_SAT 254
 uint8_t lastVol = 0; // last received volume
 uint8_t noop = 0;
@@ -60,7 +59,7 @@ Radio
 #include <SPI.h>           //included with Arduino IDE install (www.arduino.cc)
 #define NODEID        81  // node ID used for this unit
 #define CONTROLLER_ID   180 // ID of `gamecon`
-#define GATEWAY_ID    8   // ID of the `gateway` programmer node
+#define GATEWAY_ID    254   // ID of the `gateway` programmer node
 #define NETWORKID     180
 #define ENCRYPTKEY "4k8hwLgy4tRtVdGq" //(16 bytes of your choice - keep the same on all encrypted nodes)
 #ifdef __AVR_ATmega1284P__
@@ -315,18 +314,18 @@ void loop() {
             int n = max(map(((mm-stageStartTime)), 0, 500, NUM_LEDS, 0), 0);
             for(int i = NUM_LEDS; i>= n; i--){
                 brightness = (sin(((i*10)+mm)/500.0)+1)*255;
-                leds[i].setHSV(BRIGHTNESS, 255, 50);
+                leds[i].setHSV(brightness, 255, 50);
             }
         }else if(stageStartTime+5000 > mm){
             for(int i = NUM_LEDS; i>= 0; i--){
                 brightness = (sin(((i*10)+mm)/500.0)+1)*255;
-                leds[i].setHSV(BRIGHTNESS, 255, 50);
+                leds[i].setHSV(brightness, 255, 50);
             }
         }else if(stageStartTime+5500 > mm){
             int n = max(map(((mm-stageStartTime)), 5000, 5500, NUM_LEDS, 0), 0);
             for(int i = 0; i< n; i++){
                 brightness = (sin(((i*10)+mm)/500.0)+1)*255;
-                leds[i].setHSV(BRIGHTNESS, 255, 50);
+                leds[i].setHSV(brightness, 255, 50);
             }
         }else{
             nextLevel();
@@ -807,6 +806,11 @@ void animCenterRadiateTick(){
       hue--;
     }
   }
+  
+  // if (++hueFrameCounter > FRAMES_PER_HUE) {
+  //   hueFrameCounter = 0;
+  //   hue++;
+  // }
 
   for (uint8_t i=NUM_LEDS; i>NUM_LEDS/2; i--){
     // diminish as we go outward
@@ -882,6 +886,11 @@ void radioUpdate() {
     }
   }
 }
+
+
+
+
+
 
 
 

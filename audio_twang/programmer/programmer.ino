@@ -41,7 +41,7 @@
 //****************************************************************************************************************
 //**** IMPORTANT RADIO SETTINGS - YOU MUST CHANGE/CONFIGURE TO MATCH YOUR HARDWARE TRANSCEIVER CONFIGURATION! ****
 //****************************************************************************************************************
-#define NODEID             8  //this node's ID, should be unique among nodes on this NETWORKID
+#define NODEID             254  //this node's ID, should be unique among nodes on this NETWORKID
 #define NETWORKID          180  //what network this node is on
 //Match frequency to the hardware version of the radio on your Moteino (uncomment one):
 //#define FREQUENCY   RF69_433MHZ
@@ -162,4 +162,5 @@ void Blink(byte PIN, int DELAY_MS)
   delay(DELAY_MS);
   digitalWrite(PIN,LOW);
 }
+
 

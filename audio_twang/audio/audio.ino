@@ -34,7 +34,7 @@ Radio
 #include <SPI.h>           //included with Arduino IDE install (www.arduino.cc)
 #define NODEID        170     // node ID used for this unit
 #define POLE_ID     80    // ID of `pole`
-#define GATEWAY_ID    8     // ID of the `gateway` programmer node
+#define GATEWAY_ID    254     // ID of the `gateway` programmer node
 #define NETWORKID     180
 #define ENCRYPTKEY "4k8hwLgy4tRtVdGq" //(16 bytes of your choice - keep the same on all encrypted nodes)
 #ifdef __AVR_ATmega1284P__
