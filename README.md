@@ -1,13 +1,14 @@
 # lightpole
 Poles of LEDs with varying means of interaction
 
-## Confirgurations
+## audio_twang
+TWANG (https://github.com/Critters/TWANG) with an integrated audio visualizer.
 
-### lightpole_twang_wifi
-TWANG on a lightpole using a controller using an esp8266 which relays to the pole through an esp8266->moteino translator.
+The lightpole is 220 APA102 LEDs controlled by a Moteino (https://lowpowerlab.com/shop/product/99) and mounted inside a polycarbonate tube.
 
-### moteino_stream_frames
-TWANG on a lightpole.  A Moteino Mega embedded in the controller runs the game code and transmits the rendered frames to the lightpole.  A Moteino powering the lightpole receives the rendered frames then scales them to the # of pole leds and displays them.
+Another Moteino embedded in the controller reads accelerometer data from an MPU-6050 (https://www.sparkfun.com/products/10937) and streams it to the lightpole to control the green character's movement and attack.
 
-### moteino_remote_control
-TWANG on a lightpole.  A Moteino embedded in the controller streams accelerometer data to the lightpole and receives game states back.  It displays life indication LEDs and plays audio based on state.  A Moteino powering the lightpole accepts accelerometer data from the controller, runs the game code, renders the display, and returns game state to the controller.
+When the game is not being played, an audio visualizer is displayed instead.  A third Moteino decodes audio data using an MSGEQ7 (https://www.sparkfun.com/products/10468) and streams it to the lightpole for display.
+
+## reprogramming
+twang can be wirelessly reprogrammed using: python OTA.py -s /dev/tty.usbserial-A504WLK2 -f /var/folders/rc/nqhm069x29vg_n_zg4q6k0xh0000gp/T/arduino_build_326498/pole.ino.hex -t 81
