@@ -29,7 +29,7 @@ Radio
 #include <SPIFlash.h>      //get it here: https://github.com/lowpowerlab/spiflash
 #include <SPI.h>           //included with Arduino IDE install (www.arduino.cc)
 #define NODEID        180     // node ID used for this unit
-#define POLE_ID     80    // ID of `pole`
+#define POLE_ID     81    // ID of `pole`
 #define GATEWAY_ID    8     // ID of the `gateway` programmer node
 #define NETWORKID     180
 #define ENCRYPTKEY "4k8hwLgy4tRtVdGq" //(16 bytes of your choice - keep the same on all encrypted nodes)
@@ -106,7 +106,7 @@ Game
 // JOYSTICK
 #define READINGS_PER_SECOND  63
 #define JOYSTICK_ORIENTATION 1     // 0, 1 or 2 to set the angle of the joystick
-#define JOYSTICK_DIRECTION   1     // 0/1 to flip joystick direction
+#define JOYSTICK_DIRECTION   0     // 0/1 to flip joystick direction
 #define JOYSTICK_DEADZONE    5     // Angle to ignore
 int joystickTilt = 0;              // Stores the angle of the joystick
 int joystickWobble = 0;            // Stores the max amount of acceleration (wobble)
@@ -312,21 +312,23 @@ void sendJoystick() {
   joyPayload.joystickTilt = joystickTilt;
     joyPayload.joystickWobble = joystickWobble;
     
-//    Serial.print("Sending joystick struct (");
-//    Serial.print("tilt: ");
-//    Serial.print(joyPayload.joystickTilt);
-//    Serial.print("wob: ");
-//    Serial.print(joyPayload.joystickWobble);
-//    Serial.print("byes: ");
-//  Serial.print(sizeof(joyPayload));
-//  Serial.print(" ... ");
-    radio.send(POLE_ID, (const void*)&joyPayload, sizeof(joyPayload), false);
-  // if (radio.sendWithRetry(POLE_ID, (const void*)&livesPayload, sizeof(livesPayload)))
-  //  Serial.print(" ok!");
-  // else
-  //  Serial.print(" nothing...");
-//  Serial.println();
+//   Serial.print("Sending joystick struct (");
+//   Serial.print(" tilt: ");
+//   Serial.print(joyPayload.joystickTilt);
+//   Serial.print(" wob: ");
+//   Serial.print(joyPayload.joystickWobble);
+//   Serial.print(" ) byes: ");
+// Serial.print(sizeof(joyPayload));
+// Serial.print(" ... ");
+     radio.send(POLE_ID, (const void*)&joyPayload, sizeof(joyPayload), false);
+//  if (radio.sendWithRetry(POLE_ID, (const void*)&joyPayload, sizeof(joyPayload)))
+//   Serial.print(" ok!");
+//  else
+//   Serial.print(" nothing...");
+// Serial.println();
 }
+
+
 
 
 

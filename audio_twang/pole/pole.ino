@@ -58,7 +58,7 @@ Radio
 #include <RFM69_OTA.h>     //get it here: https://github.com/lowpowerlab/RFM69
 #include <SPIFlash.h>      //get it here: https://github.com/lowpowerlab/spiflash
 #include <SPI.h>           //included with Arduino IDE install (www.arduino.cc)
-#define NODEID        80  // node ID used for this unit
+#define NODEID        81  // node ID used for this unit
 #define CONTROLLER_ID   180 // ID of `gamecon`
 #define GATEWAY_ID    8   // ID of the `gateway` programmer node
 #define NETWORKID     180
@@ -106,7 +106,7 @@ long lastFrameDrawMillis = 0;
 long lastJoystickMoveMillis = 0;
 int levelNumber = 0;
 #define JOYSTICK_IDLE_TIMEOUT_MILLIS  30000
-#define LEVEL_COUNT          9
+#define LEVEL_COUNT          11
 
 // JOYSTICK
 #define ATTACK_THRESHOLD     30000 // The threshold that triggers an attack
@@ -177,17 +177,19 @@ void setup() {
   // init radio
   radio.initialize(RF69_915MHZ,NODEID,NETWORKID);
   radio.encrypt(ENCRYPTKEY);
+  radio.promiscuous(true);
   radio.setHighPower();
-  Serial.print("Start node...");
+  Serial.print(F("Start node..."));
   Serial.print("Node ID = ");
   Serial.println(NODEID);
   if (flash.initialize())
-    Serial.println("SPI Flash Init OK!");
+    Serial.println(F("SPI Flash Init OK!"));
   else
-    Serial.println("SPI Flash Init FAIL!");
+    Serial.println(F("SPI Flash Init FAIL!"));
 
-    // init game
-    loadLevel();
+
+  // init game
+  loadLevel();
 
   // init timers
   audioState = AS_IDLE;
@@ -313,18 +315,18 @@ void loop() {
             int n = max(map(((mm-stageStartTime)), 0, 500, NUM_LEDS, 0), 0);
             for(int i = NUM_LEDS; i>= n; i--){
                 brightness = (sin(((i*10)+mm)/500.0)+1)*255;
-                leds[i].setHSV(brightness, 255, 50);
+                leds[i].setHSV(BRIGHTNESS, 255, 50);
             }
         }else if(stageStartTime+5000 > mm){
             for(int i = NUM_LEDS; i>= 0; i--){
                 brightness = (sin(((i*10)+mm)/500.0)+1)*255;
-                leds[i].setHSV(brightness, 255, 50);
+                leds[i].setHSV(BRIGHTNESS, 255, 50);
             }
         }else if(stageStartTime+5500 > mm){
             int n = max(map(((mm-stageStartTime)), 5000, 5500, NUM_LEDS, 0), 0);
             for(int i = 0; i< n; i++){
                 brightness = (sin(((i*10)+mm)/500.0)+1)*255;
-                leds[i].setHSV(brightness, 255, 50);
+                leds[i].setHSV(BRIGHTNESS, 255, 50);
             }
         }else{
             nextLevel();
@@ -371,16 +373,22 @@ void loadLevel(){
             spawnPool[0].Spawn(1000, 5500, 3, 0, 0);
             break;
         case 4:
+            // Offset Lava Run
+            spawnPool[1].Spawn(0, 5500, 5, 1, 10000);
+            spawnLava(350, 440, 2000, 2000, 0, "OFF");
+            spawnLava(560, 650, 2000, 2000, 0, "ON");
+            break;
+        case 5:
             // Sin enemy
             spawnEnemy(700, 1, 7, 275);
             spawnEnemy(500, 1, 5, 250);
             break;
-        case 5:
+        case 6:
             // Conveyor
             spawnConveyor(100, 600, -1);
             spawnEnemy(800, 0, 0, 0);
             break;
-        case 6:
+        case 7:
             // Conveyor of enemies
             spawnConveyor(50, 1000, 1);
             spawnEnemy(300, 0, 0, 0);
@@ -391,7 +399,16 @@ void loadLevel(){
             spawnEnemy(800, 0, 0, 0);
             spawnEnemy(900, 0, 0, 0);
             break;
-        case 7:
+        case 8:
+            // Alternating All Lava Run
+            spawnLava(200, 290, 1250, 1250, 0, "OFF");
+            spawnLava(360, 440, 1250, 1250, 0, "ON");
+            spawnLava(510, 590, 1250, 1250, 0, "OFF");
+            spawnLava(660, 740, 1250, 1250, 0, "ON");
+            spawnLava(810, 890, 1250, 1250, 0, "OFF");
+            spawnPool[1].Spawn(0, 4500, 5, 1, 10000);
+            break;
+        case 9:
             // Lava run
             spawnLava(195, 300, 2000, 2000, 0, "OFF");
             spawnLava(350, 455, 2000, 2000, 0, "OFF");
@@ -399,7 +416,7 @@ void loadLevel(){
             spawnLava(660, 760, 2000, 2000, 0, "OFF");
             spawnPool[0].Spawn(1000, 3800, 4, 0, 0);
             break;
-        case 8:
+        case 10:
             // Sin enemy #2
             spawnEnemy(700, 1, 7, 275);
             spawnEnemy(500, 1, 5, 250);
@@ -407,7 +424,7 @@ void loadLevel(){
             spawnPool[1].Spawn(0, 5500, 5, 1, 10000);
             spawnConveyor(100, 900, -1);
             break;
-        case 9:
+        case 11:
             // Boss
             spawnBoss();
             break;
@@ -498,7 +515,7 @@ void gameOver(){
 
 void die(){
     playerAlive = 0;
-    if(levelNumber > 0) lives --;
+    // if(levelNumber > 0) lives --;
     updateLives();
     if(lives == 0){
         levelNumber = 0;
@@ -806,6 +823,19 @@ void animCenterRadiateTick(){
 }
 
 
+// void animMeetAndMergeTick() {
+//   for (uint8_t i=NUM_LEDS/3+1; i<NUM_LEDS; i++){
+//     // diminish as we go down
+//     vols[i] = scale8(vols[i+1], 245);
+//   }
+
+//   for (uint8_t i=NUM_LEDS/3+1; i<NUM_LEDS; i++){
+//     // diminish as we go up
+//     vols[i] = scale8(vols[i+1], 245);
+//   }
+// }
+
+
 // ---------------------------------
 // ------------ Radio --------------
 // ---------------------------------
@@ -838,17 +868,30 @@ void radioUpdate() {
       //   radio.sendACK();
       // }
     } else if (radio.DATALEN == sizeof(JoystickPayload)) {
-      joyPayload = *(JoystickPayload*)radio.DATA;
-      joystickTilt = joyPayload.joystickTilt;
-      joystickWobble = joyPayload.joystickWobble;
-      //    if (radio.ACKRequested()) {
-      //      radio.sendACK();
-      //    }
+      if (radio.TARGETID == NODEID) {
+        joyPayload = *(JoystickPayload*)radio.DATA;
+        joystickTilt = joyPayload.joystickTilt;
+        joystickWobble = joyPayload.joystickWobble;
+        //    if (radio.ACKRequested()) {
+        //      radio.sendACK();
+        //    }
+      }
     } else {
         Serial.print("Unrecognized payload size: ");Serial.print(radio.DATALEN);
         Serial.println();
     }
   }
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
