@@ -7,6 +7,12 @@
  *          Simultaniously accepts audio data from `audio` and uses it to render a visualizer in the background.
  */
 
+#define NODEID        81  // node ID used for this unit
+#define CONTROLLER_ID 181 // ID of `gamecon`
+#define GATEWAY_ID    254 // ID of the `gateway` programmer node
+#define NETWORKID     180
+#define ENCRYPTKEY "4k8hwLgy4tRtVdGq" //(16 bytes of your choice - keep the same on all encrypted nodes)
+
 /***************
 Metronome (timer)
 ***************/
@@ -57,11 +63,6 @@ Radio
 #include <RFM69_OTA.h>     //get it here: https://github.com/lowpowerlab/RFM69
 #include <SPIFlash.h>      //get it here: https://github.com/lowpowerlab/spiflash
 #include <SPI.h>           //included with Arduino IDE install (www.arduino.cc)
-#define NODEID        81  // node ID used for this unit
-#define CONTROLLER_ID   180 // ID of `gamecon`
-#define GATEWAY_ID    254   // ID of the `gateway` programmer node
-#define NETWORKID     180
-#define ENCRYPTKEY "4k8hwLgy4tRtVdGq" //(16 bytes of your choice - keep the same on all encrypted nodes)
 #ifdef __AVR_ATmega1284P__
   #define LED           15 // Moteino MEGAs have LEDs on D15
   #define FLASH_SS      23 // and FLASH SS on D23
@@ -136,7 +137,8 @@ int playerPosition;                // Stores the player position
 int playerPositionModifier;        // +/- adjustment to player position
 bool playerAlive;
 long killTime;
-int lives = 3;
+#define LIVES 6
+int lives = LIVES;
 
 // POOLS
 Enemy enemyPool[7] = {
@@ -400,11 +402,11 @@ void loadLevel(){
             break;
         case 8:
             // Alternating All Lava Run
-            spawnLava(200, 290, 1250, 1250, 0, "OFF");
-            spawnLava(360, 440, 1250, 1250, 0, "ON");
-            spawnLava(510, 590, 1250, 1250, 0, "OFF");
-            spawnLava(660, 740, 1250, 1250, 0, "ON");
-            spawnLava(810, 890, 1250, 1250, 0, "OFF");
+            spawnLava(200, 280, 1250, 1250, 0, "OFF");
+            spawnLava(370, 430, 1250, 1250, 0, "ON");
+            spawnLava(520, 580, 1250, 1250, 0, "OFF");
+            spawnLava(670, 730, 1250, 1250, 0, "ON");
+            spawnLava(820, 880, 1250, 1250, 0, "OFF");
             spawnPool[1].Spawn(0, 4500, 5, 1, 10000);
             break;
         case 9:
@@ -498,7 +500,7 @@ void levelComplete(){
     if(levelNumber == LEVEL_COUNT) {
       stage = GS_COMPLETE;
     }
-    lives = 3;
+    lives = LIVES;
 }
 
 void nextLevel(){
@@ -518,7 +520,7 @@ void die(){
     updateLives();
     if(lives == 0){
         levelNumber = 0;
-        lives = 3;
+        lives = LIVES;
     }
     for(int p = 0; p < particleCount; p++){
         particlePool[p].Spawn(playerPosition);
@@ -886,16 +888,6 @@ void radioUpdate() {
     }
   }
 }
-
-
-
-
-
-
-
-
-
-
 
 
 

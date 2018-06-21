@@ -48,7 +48,7 @@
 //#define FREQUENCY   RF69_868MHZ
 #define FREQUENCY     RF69_915MHZ
 // #define FREQUENCY_EXACT 916000000
-#define ENCRYPTKEY "4k8hwLgy4tRtVdGq" //(16 bytes of your choice - keep the same on all encrypted nodes)
+#define ENCRYPTKEY "sampleEncryptKey" //(16 bytes of your choice - keep the same on all encrypted nodes)
 #define IS_RFM69HW_HCW  //uncomment only for RFM69HW/HCW! Leave out if you have RFM69W/CW!
 //*********************************************************************************************
 #define ENABLE_ATC               //comment out this line to disable AUTO TRANSMISSION CONTROL
@@ -162,5 +162,7 @@ void Blink(byte PIN, int DELAY_MS)
   delay(DELAY_MS);
   digitalWrite(PIN,LOW);
 }
+
+
 
 

@@ -2,11 +2,17 @@
  * Uploaded to: Moteino RFM69HW - 868/915Mhz
  * Physical Description: A Moteino in a 3d printed box with a doorstop on top.
  *                       On top of the doorstop is an MPU-6050, which is wired to the Moteino.
- *                       The Moteino is powered by a 3.7V 6600mAh LiIon battery.
+ *                       The Moteino is powered by 3 AAA batteries.
  * Purpose: Read tilt and acceleration from MPU-6050 and stream data to `pole`.
  *      `pole` sends back lives and sfx requests.
  *      `gamecon` displays life indication LEDs and plays audio.
  */
+
+#define NODEID        181  // node ID used for this unit
+#define POLE_ID       80   // ID of `pole`
+#define GATEWAY_ID    254  // ID of the `gateway` programmer node
+#define NETWORKID     180
+#define ENCRYPTKEY "sampleEncryptKey" //(16 bytes of your choice - keep the same on all encrypted nodes)
 
 /***************
 Metronome (timer)
@@ -28,11 +34,6 @@ Radio
 #include <RFM69_OTA.h>     //get it here: https://github.com/lowpowerlab/RFM69
 #include <SPIFlash.h>      //get it here: https://github.com/lowpowerlab/spiflash
 #include <SPI.h>           //included with Arduino IDE install (www.arduino.cc)
-#define NODEID        180     // node ID used for this unit
-#define POLE_ID     81    // ID of `pole`
-#define GATEWAY_ID    8     // ID of the `gateway` programmer node
-#define NETWORKID     180
-#define ENCRYPTKEY "4k8hwLgy4tRtVdGq" //(16 bytes of your choice - keep the same on all encrypted nodes)
 #ifdef __AVR_ATmega1284P__
   #define LED           15 // Moteino MEGAs have LEDs on D15
   #define FLASH_SS      23 // and FLASH SS on D23
@@ -327,6 +328,11 @@ void sendJoystick() {
 //   Serial.print(" nothing...");
 // Serial.println();
 }
+
+
+
+
+
 
 
 
