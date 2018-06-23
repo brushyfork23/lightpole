@@ -11,7 +11,7 @@
 #define CONTROLLER_ID 181 // ID of `gamecon`
 #define GATEWAY_ID    254 // ID of the `gateway` programmer node
 #define NETWORKID     180
-#define ENCRYPTKEY "4k8hwLgy4tRtVdGq" //(16 bytes of your choice - keep the same on all encrypted nodes)
+#define ENCRYPTKEY "sampleEncryptKey" //(16 bytes of your choice - keep the same on all encrypted nodes)
 
 /***************
 Metronome (timer)
@@ -23,15 +23,15 @@ Metronome (timer)
 LEDs
 ***************/
 #include <FastLED.h>
-#define PIN_DATA1      4
-#define PIN_DATA2      7
-#define PIN_CLK        6
-#define LED_TYPE       APA102
-#define LED_COLOR_ORDER      BGR//GBR
-#define BRIGHTNESS           200
-#define DIRECTION            1     // 0 = right to left, 1 = left to right
-#define NUM_LEDS       110
-#define FPS         63
+#define PIN_DATA1         4
+#define PIN_DATA2         7
+#define PIN_CLK           6
+#define LED_TYPE          APA102
+#define LED_COLOR_ORDER   BGR//GBR
+#define BRIGHTNESS        200
+#define DIRECTION         1     // 0 = right to left, 1 = left to right
+#define NUM_LEDS          110
+#define FRAMES_PER_SECOND 63
 CRGB leds[NUM_LEDS];
 
 
@@ -48,11 +48,6 @@ uint8_t noop = 0;
 uint8_t vols[NUM_LEDS]; // volume readings (one for each LED)
 #define AUDIO_IDLE_TIMEOUT_MILLIS  90000
 long lastAudioVolMillis = 0;
-enum audioState {
-  AS_RECEIVING=0,
-  AS_IDLE
-};
-audioState audioState;
 
 
 /***************
@@ -71,7 +66,20 @@ Radio
   #define FLASH_SS      8 // and FLASH SS on D8
 #endif
 #define AUDIO_TRANSMISSION_TIMEOUT_MILLIS 250
+enum audioState {
+  AS_RECEIVING=0,
+  AS_IDLE
+};
+audioState audioState;
+#define GAMECON_TRANSMISSION_TIMEOUT_MILLIS 151
 long lastAudioTransmissionMillis = 0;
+long lastGameconTransmissionMillis = 0;
+enum gameconState {
+  GCS_IDLE=0,
+  GCS_MOVING,
+  GCS_ATTACKING
+};
+gameconState gameconState;
 
 typedef struct {
   int joystickTilt;
@@ -202,7 +210,7 @@ void loop() {
   int brightness = 0;
 
   long mm = millis();
-  if (mm - lastFrameDrawMillis > 1000UL/FPS) {
+  if (mm - lastFrameDrawMillis > 1000UL/FRAMES_PER_SECOND) {
     lastFrameDrawMillis = mm;
 
     // check joystick; potentially toggle game state
@@ -238,10 +246,11 @@ void loop() {
 
     if (stage == GS_SCREENSAVER) {
       if (audioState == AS_RECEIVING) {
-        //animSideToSideTick();
-        animCenterRadiateTick();
+        //animAudioSideToSideTick();
+        animAudioCenterRadiateTick();
       } else {
-        animScreenSaverTick();
+        //animScreenSaverTick();
+        FastLED.clear(); // remove this line when using the screensaver
       }
     }else if(stage == GS_PLAY){
       // PLAYING
@@ -773,7 +782,7 @@ void animScreenSaverTick(){
 }
 
 // scroll pixels across the display
-void animSideToSideTick(){
+void animAudioSideToSideTick(){
   // cycle color
   if (hue >= 255) {
     hue=0;
@@ -793,7 +802,7 @@ void animSideToSideTick(){
 }
 
 // radiate pixels from center
-void animCenterRadiateTick(){
+void animAudioCenterRadiateTick(){
   // move toward target hue
   if (hue == targetHue) {
     targetHue = random8();
@@ -846,6 +855,15 @@ void animCenterRadiateTick(){
 // ------------ Radio --------------
 // ---------------------------------
 void radioUpdate() {
+  long mm = millis();
+
+  // clear gamecon readings if it's gone idle
+  if (gameconState != GCS_IDLE && mm - lastGameconTransmissionMillis > GAMECON_TRANSMISSION_TIMEOUT_MILLIS) {
+    gameconState = GCS_IDLE;
+    joystickTilt = 0;
+    joystickWobble = 0;
+  }
+
   if (radio.receiveDone()) {
     if( radio.SENDERID == GATEWAY_ID && radio.TARGETID == NODEID ) {
       Serial.print("Received targeted message from gateway.  Reflash?: ");Serial.print(radio.DATALEN);
@@ -854,14 +872,14 @@ void radioUpdate() {
     }
 
     if (radio.DATALEN == sizeof(MicPayload)) {
-      lastAudioTransmissionMillis = millis();
+      lastAudioTransmissionMillis = mm;
       // get volume
       micPayload = *(MicPayload*)radio.DATA;
       lastVol = micPayload.vol;
       noop = lastVol;
       // update state
       if (micPayload.vol > 45) {
-        lastAudioVolMillis = millis();
+        lastAudioVolMillis = mm;
         if (audioState == AS_IDLE) {
           audioState = AS_RECEIVING;
           // clear previous volume readings
@@ -875,9 +893,21 @@ void radioUpdate() {
       // }
     } else if (radio.DATALEN == sizeof(JoystickPayload)) {
       if (radio.TARGETID == NODEID) {
+        lastGameconTransmissionMillis = mm;
+        // get tilt and wobble
         joyPayload = *(JoystickPayload*)radio.DATA;
         joystickTilt = joyPayload.joystickTilt;
         joystickWobble = joyPayload.joystickWobble;
+        // update state
+        if (abs(joystickTilt) > JOYSTICK_DEADZONE) {
+          if (gameconState != GCS_ATTACKING && joystickWobble > ATTACK_THRESHOLD) {
+            gameconState = GCS_ATTACKING;
+          } else if (gameconState != GCS_MOVING) {
+            gameconState = GCS_MOVING;
+          }
+        } else if (gameconState != GCS_IDLE) {
+          gameconState = GCS_IDLE;
+        }
         //    if (radio.ACKRequested()) {
         //      radio.sendACK();
         //    }

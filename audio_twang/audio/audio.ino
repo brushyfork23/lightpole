@@ -26,7 +26,7 @@ Microphone
 #define MIC_RESET_PIN A2
 #define SMOOTHING 191
 CMSGEQ7<SMOOTHING, MIC_RESET_PIN, MIC_STROBE_PIN, MIC_OUT_PIN> MSGEQ7;
-#define MSGEQ7_INTERVAL ReadsPerSecond(30)
+#define MSGEQ7_INTERVAL ReadsPerSecond(20)
 uint8_t vol = 0;
 
 /***************

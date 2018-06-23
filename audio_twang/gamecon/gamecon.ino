@@ -105,7 +105,7 @@ Game
 #define MAX_VOLUME           10
 
 // JOYSTICK
-#define READINGS_PER_SECOND  63
+#define READINGS_PER_SECOND  20
 #define JOYSTICK_ORIENTATION 1     // 0, 1 or 2 to set the angle of the joystick
 #define JOYSTICK_DIRECTION   0     // 0/1 to flip joystick direction
 #define JOYSTICK_DEADZONE    5     // Angle to ignore
