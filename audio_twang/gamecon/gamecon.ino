@@ -9,7 +9,7 @@
  */
 
 #define NODEID        181  // node ID used for this unit
-#define POLE_ID       80   // ID of `pole`
+#define POLE_ID       81   // ID of `pole`
 #define GATEWAY_ID    254  // ID of the `gateway` programmer node
 #define NETWORKID     180
 #define ENCRYPTKEY "sampleEncryptKey" //(16 bytes of your choice - keep the same on all encrypted nodes)
@@ -105,7 +105,7 @@ Game
 #define MAX_VOLUME           10
 
 // JOYSTICK
-#define READINGS_PER_SECOND  20
+#define READINGS_PER_SECOND  30
 #define JOYSTICK_ORIENTATION 1     // 0, 1 or 2 to set the angle of the joystick
 #define JOYSTICK_DIRECTION   0     // 0/1 to flip joystick direction
 #define JOYSTICK_DEADZONE    5     // Angle to ignore
@@ -328,6 +328,7 @@ void sendJoystick() {
 //   Serial.print(" nothing...");
 // Serial.println();
 }
+
 
 
 

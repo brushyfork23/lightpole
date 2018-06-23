@@ -27,7 +27,7 @@ void Boss::Hit(){
         return;
     }
     if(_lives == 2){
-        _pos = 200;
+        _pos = 220;
     }else if(_lives == 1){
         _pos = 600;
     }
@@ -40,3 +40,4 @@ bool Boss::Alive(){
 void Boss::Kill(){
     _alive = 0;
 }
+
